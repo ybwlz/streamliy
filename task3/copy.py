@@ -34,49 +34,13 @@ st.set_page_config(
 @st.cache_data
 def load_trade_data(filename='jiaoyi.csv'):
     """加载交易数据"""
-    import os
-    
-    # 获取脚本所在目录
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    
-    # 尝试多个可能的路径
-    possible_paths = [
-        os.path.join(script_dir, filename),  # 脚本所在目录
-        filename,  # 当前工作目录
-        os.path.join('.', filename),  # 当前目录
-        os.path.join('task3', filename),  # task3子目录
-    ]
-    
-    for file_path in possible_paths:
-        try:
-            if os.path.exists(file_path):
-                df = pd.read_csv(file_path, encoding='gbk')
-                return df
-        except Exception as e:
-            continue
-    
-    # 如果所有路径都失败，显示错误信息
-    st.error(f"无法找到文件: {filename}")
-    st.info("**调试信息：**")
-    st.info(f"- 脚本所在目录: {script_dir}")
-    st.info(f"- 当前工作目录: {os.getcwd()}")
-    st.info(f"- 尝试的路径: {', '.join(possible_paths)}")
-    
-    # 列出当前目录的文件（用于调试）
     try:
-        current_files = os.listdir('.')
-        st.info(f"- 当前目录文件: {', '.join([f for f in current_files if f.endswith('.csv')][:5])}")
-    except:
-        pass
-    
-    try:
-        script_files = os.listdir(script_dir)
-        st.info(f"- 脚本目录文件: {', '.join([f for f in script_files if f.endswith('.csv')][:5])}")
-    except:
-        pass
-    
-    return None
-
+        df = pd.read_csv(filename, encoding='gbk')
+        return df
+    except Exception as e:
+        st.error(f"读取文件失败: {e}")
+        return None
+        
 # 数据清洗和预处理
 def preprocess_data(df):
     """预处理交易数据"""
