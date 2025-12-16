@@ -7,8 +7,8 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # ========== 基准数据 ==========
-# 这是根据jiaoyi.csv的日期范围获取的黄金期货基准收益率数据（使用AU0主力连续合约）
-# 数据格式：与交易日期对齐的日收益率序列（小数形式，如0.01表示1%）
+# 根据jiaoyi.csv的日期范围获取的黄金期货基准收益率数据（使用AU0主力连续合约）
+# 数据格式：与交易日期对齐的日收益率序列（小数形式）
 # 基准数据日期范围: 2024-01-04 到 2025-04-28，共71个交易日
 # 注意：第一个值为0，因为第一个交易日没有前一天的价格数据
 # 基准数据来源：akshare获取的AU0黄金主力连续合约，整个期间（315个连续交易日）总收益率61.95%
@@ -211,7 +211,7 @@ def calculate_risk_metrics(daily_returns, total_returns, initial_capital, daily_
     # 转换为百分比
     metrics['Max Drawdown'] = np.min(drawdown) * 100 if len(drawdown) > 0 else 0
     
-    # Alpha 和 Beta（如果有基准数据）
+    # Alpha 和 Beta（使用整个期间的315个交易日的连续基准数据）
     if benchmark_returns is not None and len(benchmark_returns) > 0:
         # 确保数据长度一致
         min_len = min(len(daily_returns), len(benchmark_returns))
@@ -555,8 +555,9 @@ def plot_trading_signals(df):
     fig.update_yaxes(title_text="价格", row=1, col=1)
     fig.update_yaxes(title_text="盈亏", row=2, col=1)
     
-    # 更新X轴
-    fig.update_xaxes(title_text="时间", row=2, col=1)
+    # 更新X轴日期格式（不显示标签，只设置日期格式）
+    fig.update_xaxes(tickformat="%Y-%m-%d", row=1, col=1)
+    fig.update_xaxes(tickformat="%Y-%m-%d", row=2, col=1)
     
     return fig
 
@@ -666,8 +667,11 @@ def plot_risk_charts(df, daily_pnl, metrics, use_log_scale=False):
     fig.update_yaxes(title_text="回撤", row=3, col=1)
     fig.update_yaxes(title_text="累计收益率 (%)", row=4, col=1)
     
-    # 更新X轴
-    fig.update_xaxes(title_text="日期", row=4, col=1)
+    # 更新X轴日期格式（不显示标签，只设置日期格式）
+    fig.update_xaxes(tickformat="%Y-%m-%d", row=1, col=1)
+    fig.update_xaxes(tickformat="%Y-%m-%d", row=2, col=1)
+    fig.update_xaxes(tickformat="%Y-%m-%d", row=3, col=1)
+    fig.update_xaxes(tickformat="%Y-%m-%d", row=4, col=1)
     
     # 如果使用对数轴，设置y轴类型
     if use_log_scale:
@@ -724,7 +728,7 @@ def main():
             daily_returns_pct_aligned = daily_returns_pct
             daily_pnl_aligned = daily_pnl.copy()
         
-        st.success(f"✅ 使用硬编码基准数据，共 {len(benchmark_returns)} 个交易日")
+        st.success(f"✅ 交易详情数据加载完成，共 {len(benchmark_returns)} 个交易日")
         
         # 计算风险指标（使用对齐后的daily_pnl）
         metrics = calculate_risk_metrics(daily_returns_pct_aligned, total_returns_pct, initial_capital, daily_pnl_aligned, benchmark_returns)

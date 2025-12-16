@@ -724,7 +724,7 @@ def main():
             daily_returns_pct_aligned = daily_returns_pct
             daily_pnl_aligned = daily_pnl.copy()
         
-        st.success(f"✅ 使用硬编码基准数据，共 {len(benchmark_returns)} 个交易日")
+        st.success(f"✅ 基准数据，共 {len(benchmark_returns)} 个交易日")
         
         # 计算风险指标（使用对齐后的daily_pnl）
         metrics = calculate_risk_metrics(daily_returns_pct_aligned, total_returns_pct, initial_capital, daily_pnl_aligned, benchmark_returns)
