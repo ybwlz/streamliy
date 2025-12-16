@@ -46,18 +46,40 @@ def get_benchmark_returns(start_date=None, end_date=None):
     # 获取黄金期货主力连续合约数据
     # 由于交易涉及多个合约（AU2404, AU2406, AU2408等），使用主力连续合约更合适
     try:
-        # 尝试获取主力连续合约
-        symbol = "AU0"  # 黄金主力连续合约
-        df = ak.futures_zh_daily_sina(symbol=symbol)
+        # 尝试多个可能的合约代码
+        symbols_to_try = [
+            "AU9999",  # 黄金主力连续合约（根据akshare文档）
+            "AU8888",  # 黄金指数合约
+            "AU0",     # 可能的代码
+            "AU2404",  # 第一个交易合约
+        ]
+        
+        df = None
+        successful_symbol = None
+        
+        for symbol in symbols_to_try:
+            try:
+                print(f"尝试获取 {symbol} 数据...")
+                df_test = ak.futures_zh_daily_sina(symbol=symbol)
+                
+                if df_test is not None and not df_test.empty:
+                    print(f"[成功] 成功获取 {symbol} 数据，共 {len(df_test)} 行")
+                    print(f"   列名: {df_test.columns.tolist()}")
+                    if isinstance(df_test.index, pd.DatetimeIndex):
+                        print(f"   日期范围（索引）: {df_test.index.min()} 到 {df_test.index.max()}")
+                    df = df_test
+                    successful_symbol = symbol
+                    break
+            except Exception as e:
+                error_msg = str(e)[:100].encode('ascii', 'ignore').decode('ascii')
+                print(f"   [警告] {symbol} 获取失败: {error_msg}")
+                continue
         
         if df is None or df.empty:
-            # 如果主力连续合约获取失败，尝试获取第一个合约AU2404
-            print("主力连续合约获取失败，尝试获取AU2404...")
-            df = get_futures_data("AU2404")
-        
-        if df is None or df.empty:
-            print("无法获取基准数据")
+            print("[错误] 所有合约代码都无法获取基准数据")
             return None, None
+        
+        print(f"[成功] 使用合约代码: {successful_symbol}")
         
         # 处理日期列 - akshare返回的数据通常日期在索引或第一列
         if df.index.name == 'date' or isinstance(df.index, pd.DatetimeIndex):
@@ -93,12 +115,19 @@ def get_benchmark_returns(start_date=None, end_date=None):
         end_date_dt = pd.to_datetime(end_date)
         
         # 筛选日期范围
+        print(f"筛选日期范围: {start_date} 到 {end_date}")
+        df_before = len(df)
         df = df[(df['日期'] >= start_date_dt) & (df['日期'] <= end_date_dt)]
         df = df.sort_values('日期').reset_index(drop=True)
+        print(f"筛选后数据: {df_before} 行 -> {len(df)} 行")
         
         if len(df) == 0:
-            print(f"警告: 在日期范围 {start_date} 到 {end_date} 内没有找到基准数据")
+            print(f"[错误] 警告: 在日期范围 {start_date} 到 {end_date} 内没有找到基准数据")
             return None, None
+        
+        # 显示筛选后的日期范围
+        if len(df) > 0:
+            print(f"筛选后日期范围: {df['日期'].min()} 到 {df['日期'].max()}")
         
         # 获取收盘价 - akshare通常返回'close'列
         if 'close' in df.columns:
@@ -121,15 +150,20 @@ def get_benchmark_returns(start_date=None, end_date=None):
         
         # 过滤掉NaN值
         valid_mask = ~np.isnan(prices)
-        prices = prices[valid_mask]
+        prices_clean = prices[valid_mask]
         dates_filtered = df.loc[valid_mask, '日期'].values
         
-        if len(prices) < 2:
-            print("有效价格数据不足，无法计算收益率")
+        print(f"有效价格数据: {len(prices_clean)} 个")
+        if len(prices_clean) > 0:
+            print(f"价格范围: {prices_clean.min():.2f} 到 {prices_clean.max():.2f}")
+            print(f"价格变化: {((prices_clean[-1] / prices_clean[0]) - 1) * 100:.2f}%")
+        
+        if len(prices_clean) < 2:
+            print("[错误] 有效价格数据不足，无法计算收益率")
             return None, None
         
         # 计算日收益率（简单收益率）
-        returns = np.diff(prices) / prices[:-1]
+        returns = np.diff(prices_clean) / prices_clean[:-1]
         # 注意：也可以使用对数收益率: returns = np.diff(np.log(prices))
         
         # 对应的日期（去掉第一个日期，因为收益率比价格少一个）
@@ -139,7 +173,13 @@ def get_benchmark_returns(start_date=None, end_date=None):
         if isinstance(dates, np.ndarray):
             dates = pd.to_datetime(dates)
         
-        print(f"成功获取基准数据: 日期范围 {dates[0]} 到 {dates[-1]}, 共 {len(returns)} 个交易日")
+        # 验证数据
+        total_return = np.prod(1 + returns) - 1
+        print(f"[成功] 成功获取基准数据:")
+        print(f"   日期范围: {dates[0]} 到 {dates[-1]}")
+        print(f"   交易日数: {len(returns)}")
+        print(f"   收益率均值: {np.mean(returns)*100:.6f}%")
+        print(f"   总收益率（复利）: {total_return*100:.4f}%")
         
         return returns, dates
         
@@ -191,12 +231,23 @@ def get_benchmark_daily_returns_aligned(trade_dates):
     merged = trade_df.merge(benchmark_df, on='日期', how='left')
     merged = merged.sort_values('日期').reset_index(drop=True)
     
-    # 使用ffill()代替fillna(method='ffill')以避免警告
-    # 先检查是否有初始值，如果没有则用0填充
+    # 重要：第一个交易日不应该有收益率（因为需要前一天的价格）
+    # 如果第一个交易日没有匹配的基准数据，应该保持为0
+    # 后续交易日使用前向填充
     if merged['收益率'].isna().all():
+        # 如果全部是NaN，说明日期完全不匹配
         merged['收益率'] = 0
+        print("[警告] 所有交易日期都没有匹配的基准数据，全部填充为0")
     else:
-        merged['收益率'] = merged['收益率'].ffill().fillna(0)
+        # 先处理第一个交易日：如果没有匹配数据，填充为0
+        if pd.isna(merged['收益率'].iloc[0]):
+            merged.loc[merged.index[0], '收益率'] = 0
+        
+        # 然后对剩余数据进行前向填充
+        merged['收益率'] = merged['收益率'].ffill()
+        
+        # 其他NaN值也填充为0
+        merged['收益率'] = merged['收益率'].fillna(0)
     
     # 检查对齐结果（统计非零且非NaN的匹配数）
     initial_matched = merged['收益率'].notna().sum()
