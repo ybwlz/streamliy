@@ -31,7 +31,7 @@ SYMBOL_MAP = {
 }
 
 # 数据缓存
-@st.cache_data(ttl=60 * 30)
+@st.cache_data(ttl=60 * 30)#30分钟
 def get_daily_data(symbol: str) -> pd.DataFrame:
     try:
         df = ak.futures_zh_daily_sina(symbol=symbol)
@@ -49,7 +49,7 @@ def get_daily_data(symbol: str) -> pd.DataFrame:
         return None
 
 # 缓存
-@st.cache_data(ttl=60 * 5)
+@st.cache_data(ttl=60 * 5)#5分钟刷新一次
 def get_minute_data(symbol: str, period: str = "1") -> pd.DataFrame:
     try:
         df = ak.futures_zh_minute_sina(symbol=symbol, period=period)
@@ -88,6 +88,48 @@ def calculate_kdj(df: pd.DataFrame, n: int = 9, m1: int = 3, m2: int = 3):
 
 def filter_data_by_date(df: pd.DataFrame, start_date: datetime, end_date: datetime) -> pd.DataFrame:
     mask = (df.index >= start_date) & (df.index <= end_date)
+    return df[mask]
+
+def filter_trading_hours(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    过滤非交易时间（仅对分钟级数据有效）
+    中国期货交易时间：
+    - 日盘：09:00-11:30, 13:30-15:00
+    - 夜盘：21:00-02:30（次日）
+    """
+    if df is None or df.empty:
+        return df
+    
+    df = df.copy()
+    
+    # 提取小时和分钟
+    hours = df.index.hour
+    minutes = df.index.minute
+    time_total = hours * 60 + minutes  # 转换为总分钟数，便于比较
+    
+    # 定义交易时间段（以分钟为单位）
+    # 日盘上午：09:00-11:30 (540-690分钟)
+    morning_start = 9 * 60 + 0   # 09:00
+    morning_end = 11 * 60 + 30  # 11:30
+    
+    # 日盘下午：13:30-15:00 (810-900分钟)
+    afternoon_start = 13 * 60 + 30  # 13:30
+    afternoon_end = 15 * 60 + 0     # 15:00
+    
+    # 夜盘：21:00-23:59 (1260-1439分钟) 和 00:00-02:30 (0-150分钟)
+    night_start1 = 21 * 60 + 0   # 21:00
+    night_end1 = 23 * 60 + 59    # 23:59
+    night_start2 = 0 * 60 + 0     # 00:00
+    night_end2 = 2 * 60 + 30      # 02:30
+    
+    # 创建交易时间掩码
+    mask = (
+        ((time_total >= morning_start) & (time_total <= morning_end)) |      # 日盘上午
+        ((time_total >= afternoon_start) & (time_total <= afternoon_end)) |  # 日盘下午
+        ((time_total >= night_start1) & (time_total <= night_end1)) |        # 夜盘第一段
+        ((time_total >= night_start2) & (time_total <= night_end2))          # 夜盘第二段
+    )
+    
     return df[mask]
 
 # 绘图：K线+RSI+KDJ
@@ -215,7 +257,7 @@ def main():
     st.title("📈 期货技术指标分析系统")
     st.markdown("---")
     
-    with st.sidebar:
+    with st.sidebar:#上下文管理器，在这里相当于打开配置参数后保持主页面上下文
         st.header("⚙️ 配置参数")
         
         # 1. 标的选择
@@ -279,6 +321,15 @@ def main():
             start_datetime = pd.to_datetime(start_date)
             end_datetime = pd.to_datetime(end_date).replace(hour=23, minute=59, second=59)
             df_filtered = filter_data_by_date(df, start_datetime, end_datetime)
+            
+            # 如果是分钟级数据，过滤非交易时间
+            if data_type == "分钟级" and not df_filtered.empty:
+                original_count = len(df_filtered)
+                df_filtered = filter_trading_hours(df_filtered)
+                filtered_count = len(df_filtered)
+                if original_count > filtered_count:
+                    st.info(f"已过滤 {original_count - filtered_count} 条非交易时间数据")
+            
             if df_filtered.empty:
                 st.warning(f"⚠️ 周末没有数据或所选日期范围内无数据")
                 return
