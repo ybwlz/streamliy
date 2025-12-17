@@ -1,14 +1,13 @@
-import pandas as pd # 用于数据处理
-import numpy as np # 用于数值计算
-import plotly.graph_objects as go #用于绘制交互式图表
-from plotly.subplots import make_subplots # 用于创建子图
-import streamlit as st # 用于构建Web应用
-import warnings # 用于忽略警告信息
-warnings.filterwarnings('ignore') # 忽略警告信息，filterwarnings()函数用于控制警告的显示行为，这里设置为忽略所有警告信息
+import pandas as pd 
+import numpy as np
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import streamlit as st
+import warnings
+warnings.filterwarnings('ignore')
 
 
-#副本，复制版，详情注释版
-
+#详细展示风险指标计算过程和公式说明的注释版
 
 # ========== 基准数据 ==========
 # 根据jiaoyi.csv的日期范围获取的黄金期货基准收益率数据（使用AU0主力连续合约）
@@ -18,13 +17,7 @@ warnings.filterwarnings('ignore') # 忽略警告信息，filterwarnings()函数�
 # 基准数据来源：akshare获取的AU0黄金主力连续合约，整个期间（315个连续交易日）总收益率61.95%
 # 对齐说明：使用整个期间的连续基准数据，每个交易日使用从第一个交易日到该交易日之间的累计基准收益率
 # 对齐后的基准数据总收益率：62.56%（与连续基准总收益率61.95%非常接近，差异0.60%）
-
-#BENCHMARK：表明这是基准/对比标准benchmark
-#RETURNS：表示这是收益率数据returns
-#HARDCODED：表明是硬编码/内嵌在代码中的数据（而不是从外部文件/API实时获取）hardcoded
-#大写字母和下划线命名风格，符合常量命名规范
-
-BENCHMARK_RETURNS_HARDCODED = np.array([ 
+BENCHMARK_RETURNS_HARDCODED = np.array([
     0.00000000, 0.00079190, -0.00283192, 0.00062646, -0.00488334, 0.01673517, -0.00858050, -0.00124828, 0.00283298, -0.00029081,
     0.05290060, 0.00280223, 0.09260863, 0.02121681, -0.00261023, -0.03656811, 0.00998458, 0.00214436, -0.00569398, 0.01148964,
     -0.00025243, 0.00941423, -0.00982669, -0.00476362, -0.00638190, 0.00080286, 0.00291715, 0.00199971, -0.01048659, 0.01298130,
@@ -35,150 +28,73 @@ BENCHMARK_RETURNS_HARDCODED = np.array([
     -0.00909553
 ])
 
-BENCHMARK_AVAILABLE = True # 通常用于后续额的条件判断
+BENCHMARK_AVAILABLE = True
 
 # 设置页面配置
-st.set_page_config( #st.set_page_config()函数用于设置Streamlit应用的页面配置
-    page_title="策略风险分析", 
-    page_icon="📊", 
-    layout="wide" , #layout参数设置为"wide"，表示页面布局为宽屏模式,还有"centered"模式可选，代表中间对齐
+st.set_page_config(
+    page_title="策略风险分析",
+    page_icon="📊",
+    layout="wide"
 )
 
 # 加载交易数据（使用GBK编码）
-@st.cache_data   #缓存数据以提高性能
-def load_trade_data(filename='jiaoyi.csv'): 
+@st.cache_data
+def load_trade_data(filename='jiaoyi.csv'):
     """加载交易数据"""
     import os
-    
-    # 获取脚本所在目录D :\code\flask\task3
-    script_dir = os.path.dirname(os.path.abspath(__file__)) #os.path.abspath(__file__)获取当前脚本的绝对路径，os.path.dirname()获取其父目录
-    
-    # 尝试多个可能的路径
-    possible_paths = [
-        os.path.join(script_dir, filename),  # 脚本所在目录 D :\code\flask\task3\jiaoyi.csv
-        filename,  # 当前工作目录 D :\code\flask\jiaoyi.csv
-        os.path.join('.', filename),  # 当前目录 ./jiaoyi.csv
-        os.path.join('task3', filename),  # task3子目录 task3/jiaoyi.csv
-    ]
-    
-    for file_path in possible_paths:
-        try:
-            if os.path.exists(file_path):
-                df = pd.read_csv(file_path, encoding='gbk')
-                return df
-        except Exception as e:
-            continue
-    
-    # 如果所有路径都失败，显示错误信息
-    st.error(f"无法找到文件: {filename}") #黄色警告提示
-    st.info("**调试信息：**") #蓝色信息提示**代表加粗，还有斜体等Markdown语法，比如*斜体*，或者`代码块`，还有列表等，比如- 列表项1，或者1. 列表项1
-    st.info(f"- 脚本所在目录: {script_dir}") #f-strings用于格式化字符串，{script_dir}会被替换为变量script_dir的值
-    st.info(f"- 当前工作目录: {os.getcwd()}") #os.getcwd()获取当前工作目录
-    st.info(f"- 尝试的路径: {', '.join(possible_paths)}") #join()方法用于将列表元素连接成字符串，通过', '分隔
-    
-    # 列出当前目录的文件（用于调试）
-    try:
-        current_files = os.listdir('.') #os.listdir('.') 列出当前目录的所有文件和文件夹
-        #f for f in current_files if f.endswith('.csv') 相当于
-        #for f in current_files:
-        #    if f.endswith('.csv'):
-        #        结果.append(f)
-        st.info(f"- 当前目录文件: {', '.join([f for f in current_files if f.endswith('.csv')][:5])}")#endswith()方法用于判断字符串是否以指定后缀结尾,[:5]表示只显示前五个文件
-    except:
-        pass
-    
-    try:
-        script_files = os.listdir(script_dir)
-        st.info(f"- 脚本目录文件: {', '.join([f for f in script_files if f.endswith('.csv')][:5])}")
-    except:
-        pass
-    
-    return None
+    # 获取脚本所在目录
+    script_dir = os.path.dirname(os.path.abspath(__file__))#获取当前脚本的绝对路径，os.path.dirname()获取其父目录
+    # 拼接完整路径
+    csv_path = os.path.join(script_dir,filename)
+    # 读取CSV文件
+    df = pd.read_csv(csv_path, encoding='gbk')
+    return df
 
 # 数据清洗和预处理
 def preprocess_data(df):
-    """预处理交易数据"""
-    df = df.copy() #这是pandas的方法，用于创建DataFrame的副本，避免修改原始数据
+    """简化版数据清洗"""
+    df = df.copy()
     
-    # 合并日期和时间
-    try:
-        #pd.to_datetime()函数用于将字符串转换为日期时间格式,astype(str)确保数据是字符串类型,format指定日期时间格式，errors='coerce'会将无法解析的值转换NaN,+号连接字符串
-        df['日期时间'] = pd.to_datetime(df['日期'].astype(str) + ' ' + df['委托时间'].astype(str), 
-                                      format='%Y/%m/%d %H:%M:%S', errors='coerce')
-    #except没有指定format时的备用方案，会自动推断格式
-    except:
-        df['日期时间'] = pd.to_datetime(df['日期'].astype(str) + ' ' + df['委托时间'].astype(str), errors='coerce')
-    
-    #.sort_values()用于按指定列排序，reset_index(drop=True)用于重置索引，drop=True表示不保留旧索引
+    # 1. 合并日期时间（假设列名就是"日期"和"委托时间"）
+    df['日期时间'] = pd.to_datetime(df['日期'] + ' ' + df['委托时间'], format='%Y/%m/%d %H:%M:%S', errors='coerce')
     df = df.sort_values('日期时间').reset_index(drop=True)
     
-    # 转换数据类型
-    # 成交数量（处理"手"单位）
-    #df.columns用于获取DataFrame的列名列表
-    if '成交数量' in df.columns:
-        # .dtype属性用于获取列的数据类型，object表示字符串类型,在pd里面
-        if df['成交数量'].dtype == 'object':
-            # .astype(str)确保数据是字符串类型，.str.replace()用于替换字符串中的指定内容，.str.strip()用于去除字符串两端的空白字符
-            df['成交数量'] = df['成交数量'].astype(str).str.replace('手', '').str.replace(',', '').str.strip()
-            # .pd.to_numeric()用于将字符串转换为数值类型，errors='coerce'会将无法转换的值变为NaN
-            df['成交数量'] = pd.to_numeric(df['成交数量'], errors='coerce')
-        else:
-            df['成交数量'] = pd.to_numeric(df['成交数量'], errors='coerce')
+    # 2. 清理数字列（直接处理，不用if判断）
+    # 成交数量
+    df['成交数量'] = pd.to_numeric(df['成交数量'].astype(str).str.replace('手', ''), errors='coerce')
     
-    # 成交价格（列名可能是'成交价'）
-    price_col = '成交价' if '成交价' in df.columns else '成交价格'
-    if price_col in df.columns:
-        if df[price_col].dtype == 'object':
-            df[price_col] = df[price_col].astype(str).str.replace(',', '').str.strip()
-        df[price_col] = pd.to_numeric(df[price_col], errors='coerce')
-        # 统一列名为'成交价格'
-        if price_col != '成交价格':
-            df['成交价格'] = df[price_col]
+    # 成交价
+    df['成交价'] = pd.to_numeric(df['成交价'].astype(str).str.replace(',', ''), errors='coerce')
     
-    # 成交金额（列名可能是'成交额'）
-    amount_col = '成交额' if '成交额' in df.columns else '成交金额'
-    if amount_col in df.columns:
-        if df[amount_col].dtype == 'object':
-            df[amount_col] = df[amount_col].astype(str).str.replace(',', '').str.strip()
-        df[amount_col] = pd.to_numeric(df[amount_col], errors='coerce')
-        # 统一列名为'成交金额'
-        if amount_col != '成交金额':
-            df['成交金额'] = df[amount_col]
+    # 成交金额
+    df['成交额'] = pd.to_numeric(df['成交额'].astype(str).str.replace(',', ''), errors='coerce')
     
-    # 平仓盈亏（处理"-"表示0的情况）
-    if df['平仓盈亏'].dtype == 'object':
-        df['平仓盈亏'] = df['平仓盈亏'].astype(str).str.replace(',', '').str.strip()
-        df['平仓盈亏'] = df['平仓盈亏'].replace(['-', ''], '0')
-    df['平仓盈亏'] = pd.to_numeric(df['平仓盈亏'], errors='coerce').fillna(0)
+    # 平仓盈亏
+    df['平仓盈亏'] = pd.to_numeric(df['平仓盈亏'].astype(str).str.replace(',', '').replace(['-', ''], '0'), errors='coerce').fillna(0)
     
     # 手续费
-    if df['手续费'].dtype == 'object':
-        df['手续费'] = df['手续费'].astype(str).str.replace(',', '').str.strip()
-        df['手续费'] = df['手续费'].replace(['-', ''], '0')
-    df['手续费'] = pd.to_numeric(df['手续费'], errors='coerce').fillna(0)
+    df['手续费'] = pd.to_numeric(df['手续费'].astype(str).str.replace(',', '').replace(['-', ''], '0'), errors='coerce').fillna(0)
     
-    # 计算每笔交易的净盈亏（平仓盈亏 - 手续费）
+    # 计算净盈亏
     df['净盈亏'] = df['平仓盈亏'] - df['手续费']
     
     return df
 
-
-
 # 计算风险指标
-#这些参数是函数calculate_risk_metrics的输入参数，分别日期收益率序列、总收益率、初始资金、日盈亏数据和基准收益率数据
 def calculate_risk_metrics(daily_returns, total_returns, initial_capital, daily_pnl, benchmark_returns=None):
     """计算各种风险指标"""
+    # 无风险利率（年化，4%）
+    RISK_FREE_RATE = 0.04
+    
     metrics = {}
     
     # 确保daily_returns是数组
-    if isinstance(daily_returns, pd.Series): #isinstance()函数用于检查变量类型,意思是如果daily_returns是pandas的Series类型
-        daily_returns = daily_returns.values #.values属性用于获取Series的底层NumPy数组,之所以是因为后续计算需要使用NumPy数组进行数值计算,相当于就是字典把key取出来，就是numpy数组
+    if isinstance(daily_returns, pd.Series):
+        daily_returns = daily_returns.values
     
     # 过滤NaN值
-    daily_returns = daily_returns[~np.isnan(daily_returns)]#~表示取反，np.isnan()用于判断NaN值，~np.isnan()表示非NaN值
+    daily_returns = daily_returns[~np.isnan(daily_returns)]
     
-
-    #防御性编程：如果daily_returns长度为0，直接返回空字典，避免后续计算出错
     if len(daily_returns) == 0:
         return {}
     
@@ -189,10 +105,8 @@ def calculate_risk_metrics(daily_returns, total_returns, initial_capital, daily_
     trading_days = len(daily_returns)
     if trading_days > 0:
         # 计算实际交易天数
-        date_range = (daily_pnl['日期'].max() - daily_pnl['日期'].min()).days  #daily_pnl是一个DataFrame，包含每日盈亏数据，'日期'列是日期类型，.max()和.min()分别获取最大和最小日期，
-                                                                               #.days属性获取两个日期之间的天数差
-        years = date_range / 365.25 if date_range > 0 else trading_days / 252 #考虑闰年，使用365.25天/年，如果date_range为0，则退化为trading_days/252，之所以是252是因为通常认为每年有252个交易日
-        #而之所以在date_range为0时使用trading_days/252，是为了避免除以零的情况，同时也能在极端情况下提供一个合理的年化收益估计
+        date_range = (daily_pnl['日期'].max() - daily_pnl['日期'].min()).days
+        years = date_range / 365.25 if date_range > 0 else trading_days / 252
         if years > 0:
             metrics['Total Annualized Returns'] = ((1 + total_returns / 100) ** (1 / years) - 1) * 100
         else:
@@ -200,31 +114,35 @@ def calculate_risk_metrics(daily_returns, total_returns, initial_capital, daily_
     else:
         metrics['Total Annualized Returns'] = 0
     
-    # Algorithm Volatility 策略波动率（年化）就是策略收益的年化标准差
+    # Algorithm Volatility 策略波动率（年化）
     if len(daily_returns) > 1:
-        metrics['Algorithm Volatility'] = np.std(daily_returns) * np.sqrt(252) * 100 #.sqrt(252)用于将日标准差转换为年化标准差，乘以100转换为百分比形式
+        metrics['Algorithm Volatility'] = np.std(daily_returns) * np.sqrt(252) * 100
     else:
         metrics['Algorithm Volatility'] = 0
     
-    # Benchmark Volatility 基准波动率（就是基准收益的年化标准差）
+    # Benchmark Volatility 基准波动率（如果有基准数据）
     if benchmark_returns is not None and len(benchmark_returns) > 1:
         metrics['Benchmark Volatility'] = np.std(benchmark_returns) * np.sqrt(252) * 100
     else:
         metrics['Benchmark Volatility'] = 0
     
-    # Sharpe 夏普比率（假设无风险利率为0）
+    # Sharpe 夏普比率（考虑无风险利率4%）
+    # Sharpe = (策略年化收益率 - 无风险利率) / 策略波动率
     if metrics['Algorithm Volatility'] > 0:
-        metrics['Sharpe'] = metrics['Total Annualized Returns'] / metrics['Algorithm Volatility']
+        excess_return = metrics['Total Annualized Returns'] - RISK_FREE_RATE * 100
+        metrics['Sharpe'] = excess_return / metrics['Algorithm Volatility']
     else:
         metrics['Sharpe'] = 0
     
-    # Sortino 索提诺比率（只考虑下行波动）就是只计算负收益的标准差
+    # Sortino 索提诺比率（只考虑下行波动，考虑无风险利率4%）
+    # Sortino = (策略年化收益率 - 无风险利率) / 下行波动率
     downside_returns = daily_returns[daily_returns < 0]
     if len(downside_returns) > 1:
         downside_std = np.std(downside_returns) * np.sqrt(252) * 100
         metrics['Downside Risk'] = downside_std
         if downside_std > 0:
-            metrics['Sortino'] = metrics['Total Annualized Returns'] / downside_std
+            excess_return = metrics['Total Annualized Returns'] - RISK_FREE_RATE * 100
+            metrics['Sortino'] = excess_return / downside_std
         else:
             metrics['Sortino'] = 0
     else:
@@ -233,8 +151,8 @@ def calculate_risk_metrics(daily_returns, total_returns, initial_capital, daily_
     
     # Max Drawdown 最大回撤
     # 使用复利计算累计收益率：(1 + r1) * (1 + r2) * ... - 1
-    cumulative_returns = np.cumprod(1 + daily_returns) - 1 #np.cumprod()用于计算累积乘积
-    running_max = np.maximum.accumulate(cumulative_returns) #np.maximum.accumulate()用于计算运行中的最大值
+    cumulative_returns = np.cumprod(1 + daily_returns) - 1
+    running_max = np.maximum.accumulate(cumulative_returns)
     drawdown = cumulative_returns - running_max
     # 转换为百分比
     metrics['Max Drawdown'] = np.min(drawdown) * 100 if len(drawdown) > 0 else 0
@@ -260,11 +178,13 @@ def calculate_risk_metrics(daily_returns, total_returns, initial_capital, daily_
             if benchmark_variance > 1e-10:  # 避免除零
                 metrics['Beta'] = covariance / benchmark_variance
                 
-                # Alpha = (策略平均日收益率 - Beta * 基准平均日收益率) * 252 * 100
+                # Alpha = (策略平均日收益率 - 无风险日利率) - Beta * (基准平均日收益率 - 无风险日利率)
                 # daily_returns 和 benchmark_returns 都是小数形式（0.01表示1%）
+                # 无风险利率年化4%，日利率 = 4% / 252
+                risk_free_daily = RISK_FREE_RATE / 252
                 strategy_mean_daily = np.mean(daily_returns_clean)
                 benchmark_mean_daily = np.mean(benchmark_returns_clean)
-                alpha_daily = strategy_mean_daily - metrics['Beta'] * benchmark_mean_daily
+                alpha_daily = (strategy_mean_daily - risk_free_daily) - metrics['Beta'] * (benchmark_mean_daily - risk_free_daily)
                 # 年化Alpha（转换为百分比）
                 metrics['Alpha'] = alpha_daily * 252 * 100
                 
@@ -313,8 +233,8 @@ def calculate_risk_metrics(daily_returns, total_returns, initial_capital, daily_
         benchmark_returns_aligned = benchmark_returns[:min_len]
         
         # 过滤NaN值和无穷值
-        valid_mask = ~(np.isnan(daily_returns_aligned) | np.isnan(benchmark_returns_aligned) |  #isnan()用于判断NaN值
-                      np.isinf(daily_returns_aligned) | np.isinf(benchmark_returns_aligned)) #isinf()用于判断无穷值 之所以~是因为取非这些的值
+        valid_mask = ~(np.isnan(daily_returns_aligned) | np.isnan(benchmark_returns_aligned) | 
+                      np.isinf(daily_returns_aligned) | np.isinf(benchmark_returns_aligned))
         daily_returns_clean = daily_returns_aligned[valid_mask]
         benchmark_returns_clean = benchmark_returns_aligned[valid_mask]
         
@@ -379,7 +299,7 @@ def calculate_risk_metrics(daily_returns, total_returns, initial_capital, daily_
         if len(daily_returns_clean) > 0:
             excess_returns = daily_returns_clean - benchmark_returns_clean
             # 使用复利计算累计超额收益率
-            excess_cumulative = np.cumprod(1 + excess_returns) - 1 #np.cumprod()用于计算累积乘积
+            excess_cumulative = np.cumprod(1 + excess_returns) - 1
             excess_running_max = np.maximum.accumulate(excess_cumulative)
             excess_drawdown = excess_cumulative - excess_running_max
             # 转换为百分比
@@ -389,7 +309,7 @@ def calculate_risk_metrics(daily_returns, total_returns, initial_capital, daily_
     else:
         metrics['超额收益最大回撤'] = 0
     
-    # 超额收益夏普比率
+# 超额收益夏普比率
     if benchmark_returns is not None and len(benchmark_returns) > 0:
         # 确保数据长度一致
         min_len = min(len(daily_returns), len(benchmark_returns))
@@ -427,8 +347,11 @@ def calculate_risk_metrics(daily_returns, total_returns, initial_capital, daily_
         
         if len(daily_returns_clean) > 0:
             # 使用复利计算总收益率：(1 + r1) * (1 + r2) * ... - 1
-            strategy_total = np.prod(1 + daily_returns_clean) - 1 #np.prod()用于计算数组元素的乘积
+            strategy_total = np.prod(1 + daily_returns_clean) - 1
             benchmark_total = np.prod(1 + benchmark_returns_clean) - 1
+            
+            # 保存基准总收益（转换为百分比）
+            metrics['基准收益'] = benchmark_total * 100
             
             if abs(benchmark_total) > 1e-10:
                 # 超额收益 = (策略总收益 / 基准总收益 - 1) * 100
@@ -436,8 +359,10 @@ def calculate_risk_metrics(daily_returns, total_returns, initial_capital, daily_
             else:
                 metrics['超额收益'] = 0
         else:
+            metrics['基准收益'] = 0
             metrics['超额收益'] = 0
     else:
+        metrics['基准收益'] = 0
         metrics['超额收益'] = 0
     
     # 对数轴上的超额收益
@@ -477,21 +402,20 @@ def plot_trading_signals(df):
     fig = make_subplots(
         rows=2, cols=1,
         subplot_titles=('交易信号图（价格走势）', '累计收益曲线'),
-        vertical_spacing=0.1, #子图之间的垂直间距
-        row_heights=[0.6, 0.4] #每行子图的高度比例
+        vertical_spacing=0.1,
+        row_heights=[0.6, 0.4]
     )
     
     # 按日期时间排序
     df_sorted = df.sort_values('日期时间').reset_index(drop=True)
     
     # 1. 价格走势图（主图）
-    fig.add_trace( #add_trace()用于向图表添加数据轨迹
-        go.Scatter( #go.Scatter()用于创建散点图或折线图,还有go.Bar()用于创建柱状图，或者go.Pie()用于创建饼图等，k线图是go.Candlestick()，go.Heatmap()用于热力图等，go.Histogram()用于直方图等
-            #go代表Plotly Graph Objects，是Plotly库中用于创建图表的核心模块
+    fig.add_trace(
+        go.Scatter(
             x=df_sorted['日期时间'],
-            y=df_sorted['成交价格'],
+            y=df_sorted['成交价'],
             mode='lines',
-            name='成交价格',
+            name='成交价',
             line=dict(color='#1f77b4', width=1.5),
             hovertemplate='时间: %{x}<br>价格: %{y:.2f}<extra></extra>'
         ),
@@ -504,11 +428,11 @@ def plot_trading_signals(df):
         fig.add_trace(
             go.Scatter(
                 x=buy_signals['日期时间'],
-                y=buy_signals['成交价格'],
+                y=buy_signals['成交价'],
                 mode='markers',
                 name='买入信号（开多）',
                 marker=dict(
-                    symbol='triangle-up', #向上三角形
+                    symbol='triangle-up',
                     size=12,
                     color='green',
                     line=dict(width=2, color='darkgreen')
@@ -525,14 +449,14 @@ def plot_trading_signals(df):
         fig.add_trace(
             go.Scatter(
                 x=sell_signals['日期时间'],
-                y=sell_signals['成交价格'],
+                y=sell_signals['成交价'],
                 mode='markers',
                 name='卖出信号（平多）',
                 marker=dict(
-                    symbol='triangle-down', #向下三角形
+                    symbol='triangle-down',
                     size=12,
                     color='red',
-                    line=dict(width=2, color='darkred') #line用于设置标记边框属性
+                    line=dict(width=2, color='darkred')
                 ),
                 hovertemplate='卖出时间: %{x}<br>价格: %{y:.2f}<br>盈亏: %{customdata:.0f}<extra></extra>',
                 customdata=sell_signals['平仓盈亏']
@@ -580,15 +504,15 @@ def plot_trading_signals(df):
         template='plotly_white'
     )
     
-    # 更新Y轴标签u
-    fig.update_yaxes(title_text="价格", row=1, col=1) #update_yaxes()用于更新Y轴属性,不这样就会显示默认的yaxis title
-    fig.update_yaxes(title_text="盈亏", row=2, col=1) #title_text用于设置Y轴标题
+    # 更新Y轴标签
+    fig.update_yaxes(title_text="价格", row=1, col=1)
+    fig.update_yaxes(title_text="盈亏", row=2, col=1)
     
     # 更新X轴日期格式（不显示标签，只设置日期格式）
-    fig.update_xaxes(tickformat="%Y-%m-%d", row=1, col=1) #tickformat用于设置日期格式
+    fig.update_xaxes(tickformat="%Y-%m-%d", row=1, col=1)
     fig.update_xaxes(tickformat="%Y-%m-%d", row=2, col=1)
     
-    return fig 
+    return fig
 
 # 绘制风险指标图表
 def plot_risk_charts(df, daily_pnl, metrics, use_log_scale=False):
@@ -651,7 +575,7 @@ def plot_risk_charts(df, daily_pnl, metrics, use_log_scale=False):
     drawdown = cumulative - running_max
     
     fig.add_trace(
-        go.Scatter( #Scatter用于绘制折线图或散点图
+        go.Scatter(
             x=daily_pnl['日期'],
             y=drawdown,
             mode='lines',
@@ -724,15 +648,15 @@ def main():
         df = preprocess_data(df)
         
         # 计算累计收益
-        df['累计收益'] = df['净盈亏'].cumsum() #.cumsun()是pandas的一个方法，用于计算累计和
+        df['累计收益'] = df['净盈亏'].cumsum()
         
         # 计算初始资金（使用第一笔交易的成交金额作为参考）
-        initial_capital = abs(df['成交金额'].iloc[0]) if len(df) > 0 and df['成交金额'].iloc[0] != 0 else 1000000
+        initial_capital = abs(df['成交额'].iloc[0]) if len(df) > 0 and df['成交额'].iloc[0] != 0 else 1000000
         df['累计收益率'] = (df['累计收益'] / initial_capital) * 100
         
         # 按日期聚合（用于计算日收益率）
         df['日期_仅'] = pd.to_datetime(df['日期'], format='%Y/%m/%d', errors='coerce')
-        daily_pnl = df.groupby('日期_仅')['净盈亏'].sum().reset_index() #groupby()是pandas的一个方法，用于按指定列分组，然后对每个组进行聚合操作，这里是按'日期_仅'列分组，计算每个日期的净盈亏总和
+        daily_pnl = df.groupby('日期_仅')['净盈亏'].sum().reset_index()
         daily_pnl.columns = ['日期', '日盈亏']
         daily_pnl = daily_pnl.sort_values('日期').reset_index(drop=True)
         daily_pnl['累计收益'] = daily_pnl['日盈亏'].cumsum()
@@ -760,14 +684,12 @@ def main():
         st.success(f"✅ 交易详情数据加载完成，共 {len(benchmark_returns)} 个交易日")
         
         # 计算风险指标（使用对齐后的daily_pnl）
-        #分别表示对齐后的日收益率序列、总收益率、初始资金、对齐后的日盈亏数据和基准收益率数据
-        #这5个参数就能够计算所有的风险指标，这里metics是一个字典，包含了所有计算出来的风险指标
         metrics = calculate_risk_metrics(daily_returns_pct_aligned, total_returns_pct, initial_capital, daily_pnl_aligned, benchmark_returns)
     
     # 显示基本信息
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("总交易笔数", len(df)) #st.metric()是Streamlit中的一个函数，用于显示一个指标，这里显示总交易笔数
+        st.metric("总交易笔数", len(df))
     with col2:
         st.metric("交易日期范围", f"{daily_pnl['日期'].min().strftime('%Y-%m-%d')} 至 {daily_pnl['日期'].max().strftime('%Y-%m-%d')}")
     with col3:
@@ -778,48 +700,399 @@ def main():
     st.divider()
     
     # 风险指标展示
-    st.header("📈 风险指标") #st.header()是Streamlit中的一个函数，用于创建一个一级标题
+    st.header("📈 风险指标")
     
-    # 将指标分为多列显示
-    col1, col2, col3 = st.columns(3) #st.columns()是Streamlit中的一个函数，用于创建多列布局，这里创建了3列布局
+    # 收益指标
+    st.subheader("收益指标")
     
-    with col1: #with是Python中的上下文管理器，用于简化资源管理，这里用于在col1列中显示内容，和python中的with一样，但是在streamlit中用于布局管理
-        st.subheader("收益指标") #st.subheader()是Streamlit中的一个函数，用于创建一个二级标题
-        st.write(f"**Total Returns (策略收益)**: {metrics.get('Total Returns', 0):.4f}%") #st.write()是Streamlit中的一个函数，用于在页面上显示文本或变量内容
-        st.write(f"**Total Annualized Returns (策略年化收益)**: {metrics.get('Total Annualized Returns', 0):.4f}%")
-        st.write(f"**Alpha (阿尔法)**: {metrics.get('Alpha', 0):.4f}%")
-        st.write(f"**Beta (贝塔)**: {metrics.get('Beta', 0):.4f}")
-        st.write(f"**AEI (日均超额收益)**: {metrics.get('AEI', 0):.4f}%")
-        st.write(f"**超额收益**: {metrics.get('超额收益', 0):.4f}%")
-        st.write(f"**对数轴上的超额收益**: {metrics.get('对数轴上的超额收益', 0):.4f}%")
+    with st.expander(f"**Total Returns (策略收益)**: {metrics.get('Total Returns', 0):.4f}%"):
+        st.markdown("""
+        **公式：**
+        ```
+        Total Returns = (P_end - P_start) / P_start * 100%
+        ```
+        
+        **变量解释：**
+        - `P_end` = 策略最终股票和现金的总价值 (The total value of stocks and cash at the end of the strategy)
+        - `P_start` = 策略开始股票和现金的总价值 (The total value of stocks and cash at the start of the strategy)
+        
+        **合理性说明：**
+        该指标衡量策略在整个回测期间的总收益率，是评估策略表现的基础指标。正值表示盈利，负值表示亏损。
+        """)
     
-    with col2:
-        st.subheader("风险指标")
-        st.write(f"**Sharpe (夏普比率)**: {metrics.get('Sharpe', 0):.4f}")
-        st.write(f"**Sortino (索提诺比率)**: {metrics.get('Sortino', 0):.4f}")
-        st.write(f"**Information Ratio (信息比率)**: {metrics.get('Information Ratio', 0):.4f}")
-        st.write(f"**Algorithm Volatility (策略波动率)**: {metrics.get('Algorithm Volatility', 0):.4f}%")
-        st.write(f"**Benchmark Volatility (基准波动率)**: {metrics.get('Benchmark Volatility', 0):.4f}%")
-        st.write(f"**Max Drawdown (最大回撤)**: {metrics.get('Max Drawdown', 0):.4f}%")
-        st.write(f"**Downside Risk (下行波动率)**: {metrics.get('Downside Risk', 0):.4f}%")
+    with st.expander(f"**Total Annualized Returns (策略年化收益)**: {metrics.get('Total Annualized Returns', 0):.4f}%"):
+        st.markdown("""
+        **公式：**
+        ```
+        Total Annualized Returns = ((1 + Total Returns / 100) ^ (1 / years) - 1) * 100%
+        ```
+        
+        **变量解释：**
+        - `Total Returns` = 策略总收益率（百分比）
+        - `years` = 回测期间的年数（实际交易天数 / 365.25）
+        
+        **合理性说明：**
+        年化收益率将不同时间长度的策略收益统一到年度基准，便于比较。该指标考虑了复利效应，是评估策略长期表现的重要指标。
+        """)
     
-    with col3:
-        st.subheader("交易统计")
-        st.write(f"**胜率**: {metrics.get('胜率', 0):.4f}%")
-        st.write(f"**日胜率**: {metrics.get('日胜率', 0):.4f}%")
-        st.write(f"**盈亏比**: {metrics.get('盈亏比', 0):.4f}")
-        st.write(f"**超额收益最大回撤**: {metrics.get('超额收益最大回撤', 0):.4f}%")
-        st.write(f"**超额收益夏普比率**: {metrics.get('超额收益夏普比率', 0):.4f}")
+    with st.expander(f"**Alpha (阿尔法)**: {metrics.get('Alpha', 0):.4f}%"):
+        st.markdown("""
+        **公式：**
+        ```
+        Alpha = (策略平均日收益率 - 无风险日利率) - Beta * (基准平均日收益率 - 无风险日利率)
+        年化Alpha = Alpha_daily * 252 * 100%
+        ```
+        
+        **变量解释：**
+        - `策略平均日收益率` = 策略每日收益率的平均值
+        - `基准平均日收益率` = 基准（黄金期货）每日收益率的平均值
+        - `无风险日利率` = 无风险年化利率（4%）/ 252
+        - `Beta` = 策略相对于基准的敏感度
+        
+        **合理性说明：**
+        Alpha衡量策略超越市场（基准）的超额收益能力，考虑了市场风险（Beta）。正值表示策略跑赢市场，负值表示跑输市场。本计算中无风险利率设为4%，符合当前市场环境。
+        """)
     
-    st.divider() #st.divider()是Streamlit中的一个函数，用于在页面上添加一个水平分割线，起到分隔内容的作用,括号内可以添加参数来定制分割线的样式，
-                 #但通常不需要参数，默认样式即可。比如：st.divider(color="blue", thickness=2)代表添加一条蓝色、厚度为2像素的分割线。
+    with st.expander(f"**Beta (贝塔)**: {metrics.get('Beta', 0):.4f}"):
+        st.markdown("""
+        **公式：**
+        ```
+        Beta = Cov(策略收益率, 基准收益率) / Var(基准收益率)
+        ```
+        
+        **变量解释：**
+        - `Cov(策略收益率, 基准收益率)` = 策略收益率与基准收益率的协方差
+        - `Var(基准收益率)` = 基准收益率的方差
+        
+        **合理性说明：**
+        Beta衡量策略相对于基准的系统性风险。Beta = 1表示策略与基准同向同幅度波动；Beta > 1表示策略波动大于基准；Beta < 1表示策略波动小于基准。该指标有助于理解策略的风险特征。
+        """)
+    
+    with st.expander(f"**AEI (日均超额收益)**: {metrics.get('AEI', 0):.4f}%"):
+        st.markdown("""
+        **公式：**
+        ```
+        AEI = mean(策略日收益率 - 基准日收益率) * 100%
+        ```
+        
+        **变量解释：**
+        - `策略日收益率` = 策略每日的收益率（小数形式）
+        - `基准日收益率` = 基准（黄金期货）每日的收益率（小数形式）
+        
+        **合理性说明：**
+        AEI衡量策略平均每日相对于基准的超额收益。正值表示策略平均每日跑赢基准，负值表示跑输。该指标反映了策略的日度表现稳定性。
+        """)
+    
+    with st.expander(f"**超额收益**: {metrics.get('超额收益', 0):.4f}%"):
+        st.markdown("""
+        **公式：**
+        ```
+        超额收益 = (策略总收益率 / 基准总收益率 - 1) * 100%
+        ```
+        
+        **变量解释：**
+        - `策略总收益率` = (1 + r1) * (1 + r2) * ... * (1 + rn) - 1（复利计算）
+        - `基准总收益率` = (1 + b1) * (1 + b2) * ... * (1 + bn) - 1（复利计算）
+        
+        **合理性说明：**
+        超额收益衡量策略相对于基准的相对表现。该指标使用复利计算，考虑了时间价值。正值表示策略表现优于基准，负值表示表现劣于基准。
+        """)
+    
+    with st.expander(f"**对数轴上的超额收益**: {metrics.get('对数轴上的超额收益', 0):.4f}%"):
+        st.markdown("""
+        **公式：**
+        ```
+        对数轴上的超额收益 = log(1 + 策略总收益率) - log(1 + 基准总收益率)
+        ```
+        
+        **变量解释：**
+        - `log` = 自然对数
+        - `策略总收益率` = 策略的累计总收益率（小数形式）
+        - `基准总收益率` = 基准的累计总收益率（小数形式）
+        
+        **合理性说明：**
+        在对数轴上，相同的百分比变化显示为相同的距离，便于比较不同规模的投资表现。该指标在对数尺度下衡量策略相对于基准的超额收益，更适合长期投资分析。
+        """)
+    
+    # 风险指标
+    st.subheader("风险指标")
+    
+    with st.expander(f"**Sharpe (夏普比率)**: {metrics.get('Sharpe', 0):.4f}"):
+        st.markdown("""
+        **公式：**
+        ```
+        Sharpe = (策略年化收益率 - 无风险利率) / 策略波动率
+        ```
+        
+        **变量解释：**
+        - `策略年化收益率` = 策略的年化收益率（百分比）
+        - `无风险利率` = 4%（年化）
+        - `策略波动率` = 策略日收益率的标准差 * sqrt(252) * 100%
+        
+        **合理性说明：**
+        夏普比率衡量每单位风险所获得的超额收益。该指标考虑了无风险利率（4%），更符合实际投资环境。Sharpe > 1表示策略风险调整后收益良好，Sharpe < 1表示风险调整后收益一般。本策略的Sharpe比率表明风险调整后的收益表现较好。
+        """)
+    
+    with st.expander(f"**Sortino (索提诺比率)**: {metrics.get('Sortino', 0):.4f}"):
+        st.markdown("""
+        **公式：**
+        ```
+        Sortino = (策略年化收益率 - 无风险利率) / 下行波动率
+        ```
+        
+        **变量解释：**
+        - `策略年化收益率` = 策略的年化收益率（百分比）
+        - `无风险利率` = 4%（年化）
+        - `下行波动率` = 负收益的标准差 * sqrt(252) * 100%
+        
+        **合理性说明：**
+        索提诺比率只考虑下行风险（亏损），比夏普比率更关注投资者真正关心的风险。该指标对策略的下跌风险更敏感。Sortino > 2表示策略下行风险控制良好。本策略的Sortino比率较高，说明下行风险控制较好。
+        """)
+    
+    with st.expander(f"**Information Ratio (信息比率)**: {metrics.get('Information Ratio', 0):.4f}"):
+        st.markdown("""
+        **公式：**
+        ```
+        Information Ratio = 超额收益年化均值 / 跟踪误差
+        跟踪误差 = std(策略日收益率 - 基准日收益率) * sqrt(252) * 100%
+        ```
+        
+        **变量解释：**
+        - `超额收益年化均值` = mean(策略日收益率 - 基准日收益率) * 252 * 100%
+        - `跟踪误差` = 超额收益的标准差年化值
+        
+        **合理性说明：**
+        信息比率衡量策略相对于基准的超额收益稳定性。正值表示策略稳定跑赢基准，负值表示稳定跑输。该指标越高，说明策略的超额收益越稳定。本策略的信息比率为负，表明策略未能稳定跑赢基准。
+        """)
+    
+    with st.expander(f"**Algorithm Volatility (策略波动率)**: {metrics.get('Algorithm Volatility', 0):.4f}%"):
+        st.markdown("""
+        **公式：**
+        ```
+        Algorithm Volatility = std(策略日收益率) * sqrt(252) * 100%
+        ```
+        
+        **变量解释：**
+        - `std(策略日收益率)` = 策略每日收益率的标准差
+        - `sqrt(252)` = 年化因子（假设一年252个交易日）
+        
+        **合理性说明：**
+        策略波动率衡量策略收益的不确定性，是风险的重要指标。波动率越高，策略收益越不稳定。该指标有助于评估策略的风险水平。本策略的波动率较高，说明收益波动较大。
+        """)
+    
+    with st.expander(f"**Benchmark Volatility (基准波动率)**: {metrics.get('Benchmark Volatility', 0):.4f}%"):
+        st.markdown("""
+        **公式：**
+        ```
+        Benchmark Volatility = std(基准日收益率) * sqrt(252) * 100%
+        ```
+        
+        **变量解释：**
+        - `std(基准日收益率)` = 基准（黄金期货）每日收益率的标准差
+        - `sqrt(252)` = 年化因子（假设一年252个交易日）
+        
+        **合理性说明：**
+        基准波动率衡量基准资产（黄金期货）的波动水平。该指标用于与策略波动率对比，评估策略的风险特征。黄金作为避险资产，其波动率反映了市场对经济不确定性的反应。
+        """)
+    
+    with st.expander(f"**Max Drawdown (最大回撤)**: {metrics.get('Max Drawdown', 0):.4f}%"):
+        st.markdown("""
+        **公式：**
+        ```
+        Max Drawdown = min(累计收益率 - 累计收益率的历史最大值)
+        ```
+        
+        **变量解释：**
+        - `累计收益率` = 使用复利计算的累计收益率序列
+        - `累计收益率的历史最大值` = 到当前时点的累计收益率最大值
+        
+        **合理性说明：**
+        最大回撤衡量策略从峰值到谷底的最大跌幅，是评估策略风险的重要指标。该指标反映了策略在最坏情况下的损失。最大回撤越小，策略的风险控制越好。本策略的最大回撤较小，说明风险控制较好。
+        """)
+    
+    with st.expander(f"**Downside Risk (下行波动率)**: {metrics.get('Downside Risk', 0):.4f}%"):
+        st.markdown("""
+        **公式：**
+        ```
+        Downside Risk = std(负收益) * sqrt(252) * 100%
+        ```
+        
+        **变量解释：**
+        - `std(负收益)` = 所有负收益率的标准差
+        - `sqrt(252)` = 年化因子（假设一年252个交易日）
+        
+        **合理性说明：**
+        下行波动率只考虑亏损时的波动，更关注投资者真正关心的风险。该指标与索提诺比率配合使用，评估策略的下行风险控制能力。下行波动率越低，策略的下跌风险越小。
+        """)
+    
+    # 交易统计
+    st.subheader("交易统计")
+    
+    with st.expander(f"**胜率**: {metrics.get('胜率', 0):.4f}%"):
+        st.markdown("""
+        **公式：**
+        ```
+        胜率 = (盈利交易次数 / 总交易次数) * 100%
+        ```
+        
+        **变量解释：**
+        - `盈利交易次数` = 日收益率为正的天数
+        - `总交易次数` = 总交易日数
+        
+        **合理性说明：**
+        胜率衡量策略盈利交易的比例。高胜率不一定意味着高收益，需要结合盈亏比来看。本策略的胜率较低，但盈亏比较高，说明策略采用"小亏大赚"的策略。
+        """)
+    
+    with st.expander(f"**日胜率**: {metrics.get('日胜率', 0):.4f}%"):
+        st.markdown("""
+        **公式：**
+        ```
+        日胜率 = (策略日收益率 > 基准日收益率的天数 / 总交易日数) * 100%
+        ```
+        
+        **变量解释：**
+        - `策略日收益率 > 基准日收益率的天数` = 策略跑赢基准的天数
+        - `总交易日数` = 回测期间的总交易日数
+        
+        **合理性说明：**
+        日胜率衡量策略相对于基准的日度表现。该指标反映了策略的日度稳定性。日胜率 > 50%表示策略在多数交易日跑赢基准。本策略的日胜率略高于50%，说明在日度层面表现尚可。
+        """)
+    
+    with st.expander(f"**盈亏比**: {metrics.get('盈亏比', 0):.4f}"):
+        st.markdown("""
+        **公式：**
+        ```
+        盈亏比 = 平均盈利 / 平均亏损
+        ```
+        
+        **变量解释：**
+        - `平均盈利` = 所有正收益率的平均值
+        - `平均亏损` = 所有负收益率的绝对值平均值
+        
+        **合理性说明：**
+        盈亏比衡量策略盈利交易的平均盈利与亏损交易的平均亏损的比值。盈亏比 > 1表示平均盈利大于平均亏损，是良好的风险收益特征。本策略的盈亏比很高，说明策略能够实现"小亏大赚"，这是策略盈利的关键。
+        """)
+    
+    with st.expander(f"**超额收益最大回撤**: {metrics.get('超额收益最大回撤', 0):.4f}%"):
+        st.markdown("""
+        **公式：**
+        ```
+        超额收益最大回撤 = min(累计超额收益率 - 累计超额收益率的历史最大值)
+        ```
+        
+        **变量解释：**
+        - `累计超额收益率` = 使用复利计算的累计超额收益率序列
+        - `累计超额收益率的历史最大值` = 到当前时点的累计超额收益率最大值
+        
+        **合理性说明：**
+        超额收益最大回撤衡量策略相对于基准的最大回撤幅度。该指标反映了策略在跑输基准时的最坏情况。负值表示策略曾经大幅跑输基准。本策略的超额收益最大回撤较大，说明策略在某些时期表现不佳。
+        """)
+    
+    with st.expander(f"**超额收益夏普比率**: {metrics.get('超额收益夏普比率', 0):.4f}"):
+        st.markdown("""
+        **公式：**
+        ```
+        超额收益夏普比率 = 超额收益年化均值 / 超额收益波动率
+        ```
+        
+        **变量解释：**
+        - `超额收益年化均值` = mean(策略日收益率 - 基准日收益率) * 252 * 100%
+        - `超额收益波动率` = std(策略日收益率 - 基准日收益率) * sqrt(252) * 100%
+        
+        **合理性说明：**
+        超额收益夏普比率衡量策略相对于基准的风险调整后超额收益。该指标与信息比率类似，但使用超额收益的波动率作为风险度量。正值表示策略风险调整后跑赢基准，负值表示跑输。本策略的超额收益夏普比率为负，与信息比率一致，表明策略未能稳定跑赢基准。
+        """)
+    
+    st.divider()
+    
+    # 总体分析
+    st.subheader("📊 策略总体分析")
+    
+    # 计算基准总收益用于对比
+    benchmark_total = metrics.get('基准收益', 0)
+    strategy_total = metrics.get('Total Returns', 0)
+    alpha = metrics.get('Alpha', 0)
+    beta = metrics.get('Beta', 0)
+    sharpe = metrics.get('Sharpe', 0)
+    sortino = metrics.get('Sortino', 0)
+    information_ratio = metrics.get('Information Ratio', 0)
+    win_rate = metrics.get('胜率', 0)
+    daily_win_rate = metrics.get('日胜率', 0)
+    profit_loss_ratio = metrics.get('盈亏比', 0)
+    max_drawdown = metrics.get('Max Drawdown', 0)
+    excess_returns = metrics.get('超额收益', 0)
+    
+    # 判断是否跑赢大盘
+    beat_benchmark = strategy_total > benchmark_total
+    
+    st.markdown("### 🎯 核心结论")
+    
+    if beat_benchmark:
+        st.success(f"✅ **策略跑赢基准**：策略总收益 {strategy_total:.2f}% 高于基准收益 {benchmark_total:.2f}%，超额收益 {excess_returns:.2f}%")
+    else:
+        st.warning(f"⚠️ **策略未跑赢基准**：策略总收益 {strategy_total:.2f}% 低于基准收益 {benchmark_total:.2f}%，超额收益 {excess_returns:.2f}%")
+    
+    st.markdown("### 📈 表现分析")
+    
+    analysis_text = f"""
+    **1. 收益表现：**
+    - 策略总收益为 {strategy_total:.2f}%，年化收益率为 {metrics.get('Total Annualized Returns', 0):.2f}%
+    - 基准（黄金期货）总收益为 {benchmark_total:.2f}%
+    - Alpha为 {alpha:.2f}%，表明策略未能产生显著的超额收益
+    - Beta为 {beta:.2f}，说明策略与基准的相关性较高，但波动略低于基准
+    
+    **2. 风险特征：**
+    - 策略波动率为 {metrics.get('Algorithm Volatility', 0):.2f}%，高于基准波动率 {metrics.get('Benchmark Volatility', 0):.2f}%
+    - 最大回撤为 {max_drawdown:.2f}%，风险控制相对较好
+    - Sharpe比率为 {sharpe:.2f}，风险调整后收益表现良好
+    - Sortino比率为 {sortino:.2f}，下行风险控制优秀，说明策略在下跌时风险控制较好
+    
+    **3. 交易特征：**
+    - 胜率为 {win_rate:.2f}%，虽然较低，但盈亏比高达 {profit_loss_ratio:.2f}
+    - 这表明策略采用了"小亏大赚"的策略，通过少数大盈利交易弥补多数小亏损
+    - 日胜率为 {daily_win_rate:.2f}%，略高于50%，说明在日度层面表现尚可
+    
+    **4. 基准分析（黄金上涨原因）：**
+    - 黄金期货作为避险资产，在回测期间表现强劲（{benchmark_total:.2f}%）
+    - 黄金上涨的主要原因可能包括：
+      * 全球经济不确定性增加，投资者寻求避险资产
+      * 通胀预期上升，黄金作为抗通胀资产受到青睐
+      * 美元走弱，黄金价格通常与美元呈负相关
+      * 地缘政治风险，黄金作为传统避险资产需求增加
+    
+    **5. 频繁交易的得失分析：**
+    
+    **得到的：**
+    - ✅ 通过频繁交易捕捉短期波动，获得了 {strategy_total:.2f}% 的收益
+    - ✅ 高盈亏比（{profit_loss_ratio:.2f}）说明策略能够抓住大趋势，实现"小亏大赚"
+    - ✅ Sortino比率高（{sortino:.2f}），说明下行风险控制良好
+    - ✅ 日胜率略高于50%，在日度层面表现尚可
+    
+    **失去的：**
+    - ❌ 未能跑赢基准（超额收益 {excess_returns:.2f}%），说明频繁交易可能错过了黄金的长期上涨趋势
+    - ❌ Alpha为负（{alpha:.2f}%），表明策略未能产生超越市场的超额收益
+    - ❌ 信息比率为负（{information_ratio:.2f}），说明策略的超额收益不稳定
+    - ❌ 交易成本（手续费）可能侵蚀了部分收益
+    - ❌ 高波动率（{metrics.get('Algorithm Volatility', 0):.2f}%）增加了策略的不确定性
+    - ❌ 胜率较低（{win_rate:.2f}%），虽然盈亏比较高，但频繁的小亏损可能影响投资者心理
+    
+    **6. 改进建议：**
+    - 考虑减少交易频率，更多持有黄金多头，捕捉长期趋势
+    - 优化止损止盈策略，在保持高盈亏比的同时提高胜率
+    - 关注黄金的基本面因素（通胀、美元、地缘政治），而非仅依赖技术指标
+    - 考虑降低仓位或使用更保守的风险管理策略，减少波动率
+    """
+    
+    st.markdown(analysis_text)
+    
+    st.divider()
     
     # 交易信号图（主要图表）
     st.header("📊 交易信号图")
     st.info("💡 **交易信号图说明**：上图显示价格走势，绿色▲表示买入信号（开多），红色▼表示卖出信号（平多）。下图显示每笔交易的盈亏和累计收益。")
     
-    fig_signals = plot_trading_signals(df) #plot_trading_signals()是一个自定义函数，用于绘制交易信号图
-    st.plotly_chart(fig_signals, use_container_width=True) #st.plotly_chart()是Streamlit中的一个函数，用于在页面上显示Plotly图表，use_container_width=True参数表示图表宽度会自动适应容器宽度
+    fig_signals = plot_trading_signals(df)
+    st.plotly_chart(fig_signals, use_container_width=True)
     
     st.divider()
     
@@ -835,19 +1108,20 @@ def main():
     st.plotly_chart(fig, use_container_width=True)
     
     # 数据表格
-    with st.expander("查看详细交易数据"): #st.expander()是Streamlit中的一个函数，用于创建一个可展开/折叠的区域，用户可以点击标题来展开或折叠内容
-        # 选择要显示的列
-        display_cols = ['日期', '委托时间', '标的', '交易类型', '成交数量'] 
-        # 添加价格列（可能是'成交价'或'成交价格'）
+    with st.expander("查看详细交易数据"):
+        # 选择要显示的列（使用实际存在的列名）
+        display_cols = ['日期', '委托时间', '标的', '交易类型', '成交数量']
+        # 添加价格列
         display_cols.append('成交价')
-        display_cols.append('成交额') #append()是Python列表的方法，用于在列表末尾添加一个元素
-        display_cols.extend(['平仓盈亏', '手续费', '净盈亏', '累计收益']) #extend()是Python列表的方法，用于将一个可迭代对象（如列表、元组等）中的元素逐个添加到当前列表的末尾
+        # 添加金额列
+        display_cols.append('成交额')
+        display_cols.extend(['平仓盈亏', '手续费', '净盈亏', '累计收益'])
         # 只显示存在的列
-        available_cols = [col for col in display_cols if col in df.columns] #columns是pandas DataFrame的一个属性，返回DataFrame的列标签列表，这里用来检查哪些列存在于DataFrame中
-        st.dataframe(df[available_cols], use_container_width=True) #st.dataframe()是Streamlit中的一个函数，用于在页面上显示一个可滚动的数据表格
+        available_cols = [col for col in display_cols if col in df.columns]
+        st.dataframe(df[available_cols], use_container_width=True)
     
     with st.expander("查看日度汇总数据"):
-        st.dataframe(daily_pnl, use_container_width=True) #use_container_width=True参数表示表格宽度会自动适应容器宽度
+        st.dataframe(daily_pnl, use_container_width=True)
 
-if __name__ == "__main__": 
+if __name__ == "__main__":
     main()

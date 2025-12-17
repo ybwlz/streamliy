@@ -1,4 +1,4 @@
-import pandas as pd
+import pandas as pd 
 import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -39,104 +39,40 @@ st.set_page_config(
 def load_trade_data(filename='jiaoyi.csv'):
     """加载交易数据"""
     import os
-    
     # 获取脚本所在目录
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    
-    # 尝试多个可能的路径
-    possible_paths = [
-        os.path.join(script_dir, filename),  # 脚本所在目录
-        filename,  # 当前工作目录
-        os.path.join('.', filename),  # 当前目录
-        os.path.join('task3', filename),  # task3子目录
-    ]
-    
-    for file_path in possible_paths:
-        try:
-            if os.path.exists(file_path):
-                df = pd.read_csv(file_path, encoding='gbk')
-                return df
-        except Exception as e:
-            continue
-    
-    # 如果所有路径都失败，显示错误信息
-    st.error(f"无法找到文件: {filename}")
-    st.info("**调试信息：**")
-    st.info(f"- 脚本所在目录: {script_dir}")
-    st.info(f"- 当前工作目录: {os.getcwd()}")
-    st.info(f"- 尝试的路径: {', '.join(possible_paths)}")
-    
-    # 列出当前目录的文件（用于调试）
-    try:
-        current_files = os.listdir('.')
-        st.info(f"- 当前目录文件: {', '.join([f for f in current_files if f.endswith('.csv')][:5])}")
-    except:
-        pass
-    
-    try:
-        script_files = os.listdir(script_dir)
-        st.info(f"- 脚本目录文件: {', '.join([f for f in script_files if f.endswith('.csv')][:5])}")
-    except:
-        pass
-    
-    return None
+    script_dir = os.path.dirname(os.path.abspath(__file__))#获取当前脚本的绝对路径，os.path.dirname()获取其父目录
+    # 拼接完整路径
+    csv_path = os.path.join(script_dir,filename)
+    # 读取CSV文件
+    df = pd.read_csv(csv_path, encoding='gbk')
+    return df
 
 # 数据清洗和预处理
 def preprocess_data(df):
-    """预处理交易数据"""
+    """简化版数据清洗"""
     df = df.copy()
     
-    # 合并日期和时间
-    try:
-        df['日期时间'] = pd.to_datetime(df['日期'].astype(str) + ' ' + df['委托时间'].astype(str), 
-                                      format='%Y/%m/%d %H:%M:%S', errors='coerce')
-    except:
-        df['日期时间'] = pd.to_datetime(df['日期'].astype(str) + ' ' + df['委托时间'].astype(str), errors='coerce')
-    
+    # 1. 合并日期时间（假设列名就是"日期"和"委托时间"）
+    df['日期时间'] = pd.to_datetime(df['日期'] + ' ' + df['委托时间'], format='%Y/%m/%d %H:%M:%S', errors='coerce')
     df = df.sort_values('日期时间').reset_index(drop=True)
     
-    # 转换数据类型
-    # 成交数量（处理"手"单位）
-    if '成交数量' in df.columns:
-        if df['成交数量'].dtype == 'object':
-            df['成交数量'] = df['成交数量'].astype(str).str.replace('手', '').str.replace(',', '').str.strip()
-            df['成交数量'] = pd.to_numeric(df['成交数量'], errors='coerce')
-        else:
-            df['成交数量'] = pd.to_numeric(df['成交数量'], errors='coerce')
+    # 2. 清理数字列（直接处理，不用if判断）
+    # 成交数量
+    df['成交数量'] = pd.to_numeric(df['成交数量'].astype(str).str.replace('手', ''), errors='coerce')
     
-    # 成交价格（列名可能是'成交价'）
-    price_col = '成交价' if '成交价' in df.columns else '成交价格'
-    if price_col in df.columns:
-        if df[price_col].dtype == 'object':
-            df[price_col] = df[price_col].astype(str).str.replace(',', '').str.strip()
-        df[price_col] = pd.to_numeric(df[price_col], errors='coerce')
-        # 统一列名为'成交价格'
-        if price_col != '成交价格':
-            df['成交价格'] = df[price_col]
+    # 成交价
+    df['成交价'] = pd.to_numeric(df['成交价'].astype(str).str.replace(',', ''), errors='coerce')
     
-    # 成交金额（列名可能是'成交额'）
-    amount_col = '成交额' if '成交额' in df.columns else '成交金额'
-    if amount_col in df.columns:
-        if df[amount_col].dtype == 'object':
-            df[amount_col] = df[amount_col].astype(str).str.replace(',', '').str.strip()
-        df[amount_col] = pd.to_numeric(df[amount_col], errors='coerce')
-        # 统一列名为'成交金额'
-        if amount_col != '成交金额':
-            df['成交金额'] = df[amount_col]
+    # 成交金额
+    df['成交额'] = pd.to_numeric(df['成交额'].astype(str).str.replace(',', ''), errors='coerce')
     
-    # 平仓盈亏（处理"-"表示0的情况）
-    if df['平仓盈亏'].dtype == 'object':
-        df['平仓盈亏'] = df['平仓盈亏'].astype(str).str.replace(',', '').str.strip()
-        df['平仓盈亏'] = df['平仓盈亏'].replace(['-', ''], '0')
-    df['平仓盈亏'] = pd.to_numeric(df['平仓盈亏'], errors='coerce').fillna(0)
+    # 平仓盈亏
+    df['平仓盈亏'] = pd.to_numeric(df['平仓盈亏'].astype(str).str.replace(',', '').replace(['-', ''], '0'), errors='coerce').fillna(0)
     
     # 手续费
-    if df['手续费'].dtype == 'object':
-        df['手续费'] = df['手续费'].astype(str).str.replace(',', '').str.strip()
-        df['手续费'] = df['手续费'].replace(['-', ''], '0')
-    df['手续费'] = pd.to_numeric(df['手续费'], errors='coerce').fillna(0)
+    df['手续费'] = pd.to_numeric(df['手续费'].astype(str).str.replace(',', '').replace(['-', ''], '0'), errors='coerce').fillna(0)
     
-    # 计算每笔交易的净盈亏（平仓盈亏 - 手续费）
+    # 计算净盈亏
     df['净盈亏'] = df['平仓盈亏'] - df['手续费']
     
     return df
@@ -144,6 +80,9 @@ def preprocess_data(df):
 # 计算风险指标
 def calculate_risk_metrics(daily_returns, total_returns, initial_capital, daily_pnl, benchmark_returns=None):
     """计算各种风险指标"""
+    # 无风险利率（年化，4%）
+    RISK_FREE_RATE = 0.04
+    
     metrics = {}
     
     # 确保daily_returns是数组
@@ -184,19 +123,23 @@ def calculate_risk_metrics(daily_returns, total_returns, initial_capital, daily_
     else:
         metrics['Benchmark Volatility'] = 0
     
-    # Sharpe 夏普比率（假设无风险利率为0）
+    # Sharpe 夏普比率（考虑无风险利率4%）
+    # Sharpe = (策略年化收益率 - 无风险利率) / 策略波动率
     if metrics['Algorithm Volatility'] > 0:
-        metrics['Sharpe'] = metrics['Total Annualized Returns'] / metrics['Algorithm Volatility']
+        excess_return = metrics['Total Annualized Returns'] - RISK_FREE_RATE * 100
+        metrics['Sharpe'] = excess_return / metrics['Algorithm Volatility']
     else:
         metrics['Sharpe'] = 0
     
-    # Sortino 索提诺比率（只考虑下行波动）
+    # Sortino 索提诺比率（只考虑下行波动，考虑无风险利率4%）
+    # Sortino = (策略年化收益率 - 无风险利率) / 下行波动率
     downside_returns = daily_returns[daily_returns < 0]
     if len(downside_returns) > 1:
         downside_std = np.std(downside_returns) * np.sqrt(252) * 100
         metrics['Downside Risk'] = downside_std
         if downside_std > 0:
-            metrics['Sortino'] = metrics['Total Annualized Returns'] / downside_std
+            excess_return = metrics['Total Annualized Returns'] - RISK_FREE_RATE * 100
+            metrics['Sortino'] = excess_return / downside_std
         else:
             metrics['Sortino'] = 0
     else:
@@ -232,11 +175,13 @@ def calculate_risk_metrics(daily_returns, total_returns, initial_capital, daily_
             if benchmark_variance > 1e-10:  # 避免除零
                 metrics['Beta'] = covariance / benchmark_variance
                 
-                # Alpha = (策略平均日收益率 - Beta * 基准平均日收益率) * 252 * 100
+                # Alpha = (策略平均日收益率 - 无风险日利率) - Beta * (基准平均日收益率 - 无风险日利率)
                 # daily_returns 和 benchmark_returns 都是小数形式（0.01表示1%）
+                # 无风险利率年化4%，日利率 = 4% / 252
+                risk_free_daily = RISK_FREE_RATE / 252
                 strategy_mean_daily = np.mean(daily_returns_clean)
                 benchmark_mean_daily = np.mean(benchmark_returns_clean)
-                alpha_daily = strategy_mean_daily - metrics['Beta'] * benchmark_mean_daily
+                alpha_daily = (strategy_mean_daily - risk_free_daily) - metrics['Beta'] * (benchmark_mean_daily - risk_free_daily)
                 # 年化Alpha（转换为百分比）
                 metrics['Alpha'] = alpha_daily * 252 * 100
                 
@@ -361,7 +306,7 @@ def calculate_risk_metrics(daily_returns, total_returns, initial_capital, daily_
     else:
         metrics['超额收益最大回撤'] = 0
     
-    # 超额收益夏普比率
+# 超额收益夏普比率
     if benchmark_returns is not None and len(benchmark_returns) > 0:
         # 确保数据长度一致
         min_len = min(len(daily_returns), len(benchmark_returns))
@@ -460,9 +405,9 @@ def plot_trading_signals(df):
     fig.add_trace(
         go.Scatter(
             x=df_sorted['日期时间'],
-            y=df_sorted['成交价格'],
+            y=df_sorted['成交价'],
             mode='lines',
-            name='成交价格',
+            name='成交价',
             line=dict(color='#1f77b4', width=1.5),
             hovertemplate='时间: %{x}<br>价格: %{y:.2f}<extra></extra>'
         ),
@@ -475,7 +420,7 @@ def plot_trading_signals(df):
         fig.add_trace(
             go.Scatter(
                 x=buy_signals['日期时间'],
-                y=buy_signals['成交价格'],
+                y=buy_signals['成交价'],
                 mode='markers',
                 name='买入信号（开多）',
                 marker=dict(
@@ -496,7 +441,7 @@ def plot_trading_signals(df):
         fig.add_trace(
             go.Scatter(
                 x=sell_signals['日期时间'],
-                y=sell_signals['成交价格'],
+                y=sell_signals['成交价'],
                 mode='markers',
                 name='卖出信号（平多）',
                 marker=dict(
@@ -580,12 +525,41 @@ def plot_risk_charts(df, daily_pnl, metrics, use_log_scale=False):
     )
     
     # 1. 累计收益曲线（主图）
-    y_data = daily_pnl['累计收益']
-    if use_log_scale and (y_data > 0).all():
-        y_data = np.log1p(y_data - y_data.min() + 1)
+    y_data = daily_pnl['累计收益'].values
+    yaxis_title = "累计收益"
+    
+    if use_log_scale:
+        # 对于对数轴，需要确保所有值为正数
+        y_min = y_data.min()
+        if y_min <= 0:
+            # 如果有负值或0值，需要偏移使所有值为正
+            # 偏移量 = abs(最小值) + 1，确保最小值为1
+            offset = abs(y_min) + 1
+            y_data_log = y_data + offset
+        else:
+            # 如果所有值都为正，使用原始值
+            offset = 0
+            y_data_log = y_data
+        
+        # 使用对数轴显示
+        y_data = y_data_log
         yaxis_title = "累计收益 (对数轴)"
+        
+        # 计算Y轴范围，确保能显示所有数据
+        y_max = y_data.max()
+        y_min_log = y_data.min()
+        # 设置Y轴范围，留一些边距
+        # 对于对数轴，最小值至少为1（因为log(1)=0），但可以更小以显示更多细节
+        if y_min_log > 0:
+            # 使用最小值的较小比例，但至少为1
+            y_range_min = max(1, y_min_log * 0.3)  # 至少从1开始，或者最小值的30%
+        else:
+            y_range_min = 1  # 如果最小值异常，至少从1开始
+        y_range_max = y_max * 1.5  # 最大值增加50%的边距，确保能看到所有数据
     else:
-        yaxis_title = "累计收益"
+        offset = 0
+        y_range_min = None
+        y_range_max = None
     
     fig.add_trace(
         go.Scatter(
@@ -594,7 +568,8 @@ def plot_risk_charts(df, daily_pnl, metrics, use_log_scale=False):
             mode='lines',
             name='累计收益',
             line=dict(color='#1f77b4', width=2),
-            hovertemplate='日期: %{x}<br>累计收益: %{y:,.0f}<extra></extra>'
+            hovertemplate='日期: %{x}<br>累计收益: %{customdata:,.0f}<extra></extra>',
+            customdata=daily_pnl['累计收益'].values  # 显示原始值
         ),
         row=1, col=1
     )
@@ -662,7 +637,18 @@ def plot_risk_charts(df, daily_pnl, metrics, use_log_scale=False):
     )
     
     # 更新Y轴标签
-    fig.update_yaxes(title_text=yaxis_title, row=1, col=1)
+    if use_log_scale:
+        # 设置对数轴类型和范围
+        # Plotly的对数轴range参数使用对数空间的值 [log10(min), log10(max)]
+        fig.update_yaxes(
+            title_text=yaxis_title,
+            type="log",
+            range=[np.log10(y_range_min), np.log10(y_range_max)],
+            row=1, col=1
+        )
+    else:
+        fig.update_yaxes(title_text=yaxis_title, row=1, col=1)
+    
     fig.update_yaxes(title_text="日盈亏", row=2, col=1)
     fig.update_yaxes(title_text="回撤", row=3, col=1)
     fig.update_yaxes(title_text="累计收益率 (%)", row=4, col=1)
@@ -672,10 +658,6 @@ def plot_risk_charts(df, daily_pnl, metrics, use_log_scale=False):
     fig.update_xaxes(tickformat="%Y-%m-%d", row=2, col=1)
     fig.update_xaxes(tickformat="%Y-%m-%d", row=3, col=1)
     fig.update_xaxes(tickformat="%Y-%m-%d", row=4, col=1)
-    
-    # 如果使用对数轴，设置y轴类型
-    if use_log_scale:
-        fig.update_yaxes(type="log", row=1, col=1)
     
     return fig
 
@@ -698,7 +680,7 @@ def main():
         df['累计收益'] = df['净盈亏'].cumsum()
         
         # 计算初始资金（使用第一笔交易的成交金额作为参考）
-        initial_capital = abs(df['成交金额'].iloc[0]) if len(df) > 0 and df['成交金额'].iloc[0] != 0 else 1000000
+        initial_capital = abs(df['成交额'].iloc[0]) if len(df) > 0 and df['成交额'].iloc[0] != 0 else 1000000
         df['累计收益率'] = (df['累计收益'] / initial_capital) * 100
         
         # 按日期聚合（用于计算日收益率）
@@ -782,6 +764,23 @@ def main():
     
     st.divider()
     
+    st.header("风险指标总结")
+    st.markdown("""
+        - **总收益**: 46.24% | **年化收益**: 33.54% 
+        - **Alpha**: -1.875% | **超额收益**: -11.41% (相对基准略微跑输，可能因为黄金涨幅太快，未能及时捕捉)
+        - **Beta**: 0.93 (策略波动性接近市场)
+
+        **风险调整后收益**
+        - **夏普比率**: 0.76 | **索提诺比率**: 2.68 (下行风险控制优于总风险控制)
+        - **最大回撤**: -4.71% (风险控制能力较强)
+        - **波动率**: 38.66% vs 基准 34.75% (策略波动略高于市场)
+
+        **交易特征**
+        - **胜率**: 35.21% (择时准确率偏低)
+        - **盈亏比**: 7.63 (盈亏结构优秀，亏损小额，盈利大幅)
+        - **日胜率**: 52.11% (日度表现略优于基准)
+            """)
+    
     # 交易信号图（主要图表）
     st.header("📊 交易信号图")
     st.info("💡 **交易信号图说明**：上图显示价格走势，绿色▲表示买入信号（开多），红色▼表示卖出信号（平多）。下图显示每笔交易的盈亏和累计收益。")
@@ -806,16 +805,10 @@ def main():
     with st.expander("查看详细交易数据"):
         # 选择要显示的列（使用实际存在的列名）
         display_cols = ['日期', '委托时间', '标的', '交易类型', '成交数量']
-        # 添加价格列（可能是'成交价'或'成交价格'）
-        if '成交价格' in df.columns:
-            display_cols.append('成交价格')
-        elif '成交价' in df.columns:
-            display_cols.append('成交价')
-        # 添加金额列（可能是'成交额'或'成交金额'）
-        if '成交金额' in df.columns:
-            display_cols.append('成交金额')
-        elif '成交额' in df.columns:
-            display_cols.append('成交额')
+        # 添加价格列
+        display_cols.append('成交价')
+        # 添加金额列
+        display_cols.append('成交额')
         display_cols.extend(['平仓盈亏', '手续费', '净盈亏', '累计收益'])
         # 只显示存在的列
         available_cols = [col for col in display_cols if col in df.columns]
