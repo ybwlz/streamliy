@@ -1,0 +1,211 @@
+# 导入函数库
+from jqdata import *
+from jqlib.technical_analysis import *
+
+# log.set_level('order', 'warning')
+
+## 初始化函数，设定基准等等
+def initialize(context):
+    # 打开防未来函数
+    set_option("avoid_future_data", True)
+    # 设置参数
+    set_parameters(context)
+    # 设定沪深300作为基准
+    set_benchmark('000300.XSHG')
+    # 开启动态复权模式(真实价格)
+    set_option('use_real_price', True)
+    ### 期货相关设定 ###
+    # 设定账户为金融账户
+    set_subportfolios([SubPortfolioConfig(cash=context.portfolio.starting_cash, type='index_futures')])
+    # 期货类每笔交易时的手续费是：买入时万分之0.23,卖出时万分之0.23,平今仓为万分之23
+    set_order_cost(OrderCost(open_commission=0.000023, close_commission=0.000023,close_today_commission=0.000023), type='index_futures')
+    # 设定保证金比例
+    set_option('futures_margin_rate', 0.15)
+    # 设置期货交易的滑点
+    set_slippage(StepRelatedSlippage(2))
+    # 开盘前运行
+    run_daily( before_market_open, time='09:00', reference_security='IF8888.CCFX')
+    # 开盘时运行
+    run_daily( market_open, time='every_bar', reference_security='IF8888.CCFX')
+    # 收盘后运行
+    run_daily( market_close, time='15:05', reference_security='IF8888.CCFX')
+
+# 设置参数
+def set_parameters(context):
+    ##### 可调参数 ##### 
+    # 策略方向(long or short)
+    g.side = 'short'
+    # 交易哪一个期货
+    g.symbol = 'IM'
+    # 均线参数
+    g.ma_num = 30
+    # 上下轨参数
+    g.up_line,g.down_line = 10,10
+    
+    
+    ##### 不可调参数 ##### 
+    # 参考信号标的
+    g.singal_symbol = set_singal_symbol(g.symbol)
+    # 开平仓信号
+    g.open_signal,g.close_signal = False,False
+    # 其他未在此设置的全局变量
+    # g.current_month,g.next_month,g.trade_contract,g.jiaoge
+    """
+    比赛中,为避免极端情况导致的信号数量过多和过少的情况，在策略中做出判断
+    1. 若当日14:50时仍未有开仓信号，则开一手
+    2. 若当日开仓信号数超过6组，则停止开仓
+    
+    为尽量保证信号符合逻辑，应强化逻辑，若某一期出现多次调用该函数，则需修改策略
+    """
+    # 是否比赛模式
+    g.mode = 'race' # {'normal':'正常模式','race':'比赛模式'}
+    # 每一天的信号数量
+    g.intriday_open_signal_num = 0
+   
+## 开盘前运行函数
+def before_market_open(context):
+    """
+    开盘前确定交易的合约,如遇交割日改变g.jiaoge以在market_open中进行交割
+    """
+    g.current_month = get_future_contracts(g.symbol)[0]
+    g.next_month = get_future_contracts(g.symbol)[1]
+    end_date = get_CCFX_end_date(g.current_month)
+    if end_date.strftime("%Y-%m-%d") == context.current_dt.strftime("%Y-%m-%d"):
+        g.delivery_day = True
+        # 交割日交易下月合约
+        g.trade_contract = g.next_month
+    else:
+        g.delivery_day = False
+        # 交易当月合约
+        g.trade_contract = g.current_month
+
+## 开盘时运行函数
+def market_open(context):
+    # 当前时间
+    now = context.current_dt
+    # 判断交割
+    if g.delivery_day and now.strftime('%H:%M') =='09:30':
+        delivery(context)
+
+    # 运行策略
+    # 策略在9:35 - 14:55之间运行
+    if now.strftime('%H:%M') < '14:55':
+        tactic(context,g.side,g.mode)
+    elif now.strftime('%H:%M') == '14:55':
+        intriday_close(context,g.side)
+        
+
+########################## 每个策略 #################################
+def tactic(context,side,mode):
+    """
+    根据30分钟成交均价开平仓
+    Args:
+        side(str):多空方向
+        mode(str):是否比赛模式
+    """
+    now = context.current_dt.strftime("%H:%M")
+    ##### 交易 ##### 
+    # 正常模式
+    if mode == 'normal':
+        if g.open_signal:
+            order(g.trade_contract, 1, side=side)
+            logging.debug(f"open_{side}-{g.trade_contract}")
+            g.open_signal = False
+        elif g.close_signal:
+            order_target_value(g.trade_contract, 0, side=side)
+            logging.debug(f"close_{side}-{g.trade_contract}")
+            g.close_signal = False
+    # 比赛模式
+    elif mode == 'race':
+        if g.open_signal and g.intriday_open_signal_num < 6:
+            order(g.trade_contract, 1, side=side)
+            logging.debug(f"开仓")
+            g.open_signal = False
+            g.intriday_open_signal_num += 1
+            print(f"此时今日开仓数量：{g.intriday_open_signal_num}")
+        elif g.close_signal:
+            order_target_value(g.trade_contract, 0, side=side)
+            logging.debug(f"平仓")
+            g.close_signal = False
+        # 14:50的时候检查是否有信号
+        if now == '14:50' and g.intriday_open_signal_num == 0:
+            order(g.trade_contract, 1, side=side)
+            logging.debug(f"没有信号,开一手仓")
+            g.open_signal = False
+            # 后面就等14:55的强平了
+            g.intriday_open_signal_num = 6
+    
+    ##### 数据处理 ##### 
+    index_data = attribute_history(g.singal_symbol, g.ma_num, unit='1m',fields=['open', 'close', 'high', 'low', 'volume', 'money'],skip_paused=True, df=True, fq='pre')
+    current_close = index_data['close'].values[-1]
+    ma = index_data['close'].mean()
+    upline = ma + g.up_line
+    dwonline = ma - g.down_line
+    # print(f'current_close:{current_close};ma:{ma};upline:{upline};dwonline:{dwonline}')
+    ##### 持仓 #####
+    long_position = context.portfolio.long_positions
+    short_position = context.portfolio.short_positions
+    position = long_position if side == 'long' else short_position
+    ##### 产生信号 ##### 
+    if side == 'long':
+        open_signal = current_close > upline
+        close_signal = current_close < dwonline
+    else:
+        open_signal = current_close < dwonline
+        close_signal = current_close > upline
+        
+    if open_signal and g.trade_contract not in position:
+        g.open_signal = True
+    elif close_signal and g.trade_contract in position:
+        g.close_signal = True
+    
+    
+def intriday_close(context,side):
+    ##### 持仓 #####
+    long_position = context.portfolio.long_positions
+    short_position = context.portfolio.short_positions
+    position = long_position if side == 'long' else short_position
+    if g.trade_contract in position:
+        order_target_value(g.trade_contract, 0, side=side)
+        logging.debug(f"14:55强制平仓,close_{side}-{g.trade_contract}")
+        g.close_signal = False
+
+def market_close(context):
+    print(f'收盘时信号数量:{g.intriday_open_signal_num}')
+    # 重置变量
+    g.intriday_open_signal_num = 0
+    # 强制平仓之后，一定要把开平仓信号改成尾盘修正变量
+    g.open_signal,g.close_signal = False,False
+
+########################## 其他函数 #################################
+# 交割日早上09:30交割
+def delivery(context):
+    log.info('今天是交割日')
+    # 多仓交割
+    if context.portfolio.long_positions:
+        order_target_value(g.current_month, 0,side='long')
+        # 开下月合约多单
+        order(g.next_month, 1,side='long')
+        log.info(f'交割日:平多{g.current_month}-开多{g.next_month}')
+    # 空仓交割
+    if context.portfolio.short_positions:
+        order_target_value(g.current_month, 0,side='short')
+        # 开下月合约多单
+        order(g.next_month, 1,side='short')
+        log.info(f'交割日:平空{g.current_month}-开空{g.next_month}')
+
+# 期货对应的指数标的
+def set_singal_symbol(symbol):
+    future_con_index_dict = {
+        'IF':'000300.XSHG',
+        'IH':'000016.XSHG',
+        'IC':'000905.XSHG',
+        'IM':'000852.XSHG'
+    }
+    singal_symbol = future_con_index_dict[symbol]
+    return singal_symbol
+
+# 获取金融期货合约到期日
+def get_CCFX_end_date(future_code):
+    # 获取金融期货合约到期日
+    return get_security_info(future_code).end_date

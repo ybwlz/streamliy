@@ -1,6 +1,6 @@
 import pandas as pd # 用于数据处理
 import numpy as np # 用于数值计算
-import plotly.graph_objects as go #用于绘制交互式图表
+import plotly.graph_objects as go #用于绘制交互式图表# .graph_objects是Plotly中用于创建图表的核心模块,包含各种图表类型和布局配置，比如散点图、折线图、柱状图等，还有布局和样式设置
 from plotly.subplots import make_subplots # 用于创建子图
 import streamlit as st # 用于构建Web应用
 import warnings # 用于忽略警告信息
@@ -208,7 +208,7 @@ def calculate_risk_metrics(daily_returns, total_returns, initial_capital, daily_
     
     # Benchmark Volatility 基准波动率（就是基准收益的年化标准差）
     if benchmark_returns is not None and len(benchmark_returns) > 1:
-        metrics['Benchmark Volatility'] = np.std(benchmark_returns) * np.sqrt(252) * 100
+        metrics['Benchmark Volatility'] = np.std(benchmark_returns) * np.sqrt(252) * 100#np.sqrt(252)相当于
     else:
         metrics['Benchmark Volatility'] = 0
     
@@ -222,14 +222,14 @@ def calculate_risk_metrics(daily_returns, total_returns, initial_capital, daily_
     downside_returns = daily_returns[daily_returns < 0]
     if len(downside_returns) > 1:
         downside_std = np.std(downside_returns) * np.sqrt(252) * 100
-        metrics['Downside Risk'] = downside_std
-        if downside_std > 0:
-            metrics['Sortino'] = metrics['Total Annualized Returns'] / downside_std
+        metrics['Downside Risk'] = downside_std#策略下行波动率
+        if downside_std > 0:#避免除零错误
+            metrics['Sortino'] = metrics['Total Annualized Returns'] / downside_std#索提诺比率（策略年化收益率 - 无风险利率）/策略下行波动率
         else:
             metrics['Sortino'] = 0
     else:
-        metrics['Downside Risk'] = 0
-        metrics['Sortino'] = 0
+        metrics['Downside Risk'] = 0#策略下行波动率为0
+        metrics['Sortino'] = 0#索提诺比率为0
     
     # Max Drawdown 最大回撤
     # 使用复利计算累计收益率：(1 + r1) * (1 + r2) * ... - 1
@@ -427,7 +427,7 @@ def calculate_risk_metrics(daily_returns, total_returns, initial_capital, daily_
         
         if len(daily_returns_clean) > 0:
             # 使用复利计算总收益率：(1 + r1) * (1 + r2) * ... - 1
-            strategy_total = np.prod(1 + daily_returns_clean) - 1 #np.prod()用于计算数组元素的乘积
+            strategy_total = np.prod(1 + daily_returns_clean) - 1 #np.prod()用于计算数组元素的乘积，和cumprod()不同，cumprod()是累积乘积
             benchmark_total = np.prod(1 + benchmark_returns_clean) - 1
             
             if abs(benchmark_total) > 1e-10:
@@ -474,7 +474,10 @@ def plot_trading_signals(df):
     绘制交易信号图，显示价格走势和买卖信号点
     """
     # 创建子图：价格走势 + 累计收益
-    fig = make_subplots(
+    fig = make_subplots(#make_subplots是Plotly中用于创建包含多个子图的图表布局的函数，包含的参数有rows（行数）、cols（列数）、subplot_titles（子图标题列表）、
+                         # vertical_spacing（子图之间的垂直间距）和 row_heights（每行的高度比例列表）还有其他参数比如horizontal_spacing（子图之间的水平间距）、shared_xaxes（是否共享X轴）
+                         # 还有shared_yaxes（是否共享Y轴）还有specs（子图规格列表）还有column_widths（每列的宽度比例列表）还有subplot_titles_font（子图标题字体属性）
+                         # title_text（图表标题文本），title_x（图表标题位置），具体可参考官方文档：https://plotly.com/python/subplots/
         rows=2, cols=1,
         subplot_titles=('交易信号图（价格走势）', '累计收益曲线'),
         vertical_spacing=0.1, #子图之间的垂直间距
