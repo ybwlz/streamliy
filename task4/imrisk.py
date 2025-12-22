@@ -135,8 +135,14 @@ def load_and_process_data(transaction_file="transaction.csv", benchmark_symbol="
     --------
     dict: 包含策略和基准数据的字典
     """
-    # 1. 加载交易数据
-    df = pd.read_csv(transaction_file, encoding='gbk')
+    # 1.加载交易数据
+    import os
+    # 获取脚本所在目录
+    script_dir = os.path.dirname(os.path.abspath(__file__))#获取当前脚本的绝对路径，os.path.dirname()获取其父目录
+    # 拼接完整路径
+    csv_path = os.path.join(script_dir,transaction_file)
+    # 读取CSV文件
+    df = pd.read_csv(csv_path, encoding='gbk')
     
     # 2. 预处理
     df['日期时间'] = pd.to_datetime(df['日期'] + ' ' + df['委托时间'], format='%Y-%m-%d %H:%M:%S', errors='coerce')
